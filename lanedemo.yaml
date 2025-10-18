@@ -1,0 +1,130 @@
+openapi: 3.0.3
+info:
+  title: Lane Universal ACP Adapter (Demo)
+  version: "1.0"
+servers:
+  - url: https://acp-adapter-backend.onrender.com
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string }
+      description: Required for POSTs; provide a unique value per request.
+    RequestId:
+      name: Request-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: Optional client request id for tracing.
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200": { description: OK }
+  /feed.json:
+    get:
+      operationId: getProductFeed
+      summary: Fetch product feed
+      security: [ { bearerAuth: [] } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+  /checkout_sessions:
+    post:
+      operationId: createCheckoutSession
+      summary: Create checkout session
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                buyer:
+                  type: object
+                  properties:
+                    email: { type: string }
+                    name: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: string }
+                      quantity: { type: integer }
+                fulfillment_address:
+                  type: object
+              required: [buyer, items]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+  /checkout_sessions/{session_id}:
+    get:
+      operationId: getCheckoutSession
+      summary: Get checkout session
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    post:
+      operationId: updateCheckoutSession
+      summary: Update checkout session
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: OK }
+  /checkout_sessions/{session_id}/complete:
+    post:
+      operationId: completeCheckoutSession
+      summary: Complete checkout session
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: OK }
