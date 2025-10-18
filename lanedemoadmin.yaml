@@ -1,0 +1,392 @@
+openapi: 3.1.0
+info:
+  title: Lane Universal ACP Adapter (Demo)
+  version: "1.0.0"
+  description: Product feed and checkout session API for Lane's demo.
+
+servers:
+  - url: https://acp-adapter-backend.onrender.com
+
+components:
+  securitySchemes:
+    api_key:
+      type: apiKey
+      in: header
+      name: Authorization
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        product_id: { type: string }
+        title: { type: string }
+        price_minor: { type: integer }
+        currency: { type: string }
+        enable_checkout: { type: boolean }
+        image_url: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+      required: [product_id, title, price_minor, currency, enable_checkout]
+
+    ProductFeed:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+      required: [items]
+
+    Address:
+      type: object
+      properties:
+        name: { type: string }
+        line1: { type: string }
+        line2: { type: string, nullable: true }
+        city: { type: string }
+        state: { type: string }
+        postal_code: { type: string }
+        country: { type: string, default: US }
+      required: [name, line1, city, state, postal_code, country]
+
+    Buyer:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+      required: [email]
+
+    LineItem:
+      type: object
+      properties:
+        product_id: { type: string }
+        quantity: { type: integer, minimum: 1, default: 1 }
+      required: [product_id, quantity]
+
+    CheckoutSession:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        subtotal_minor: { type: integer }
+        shipping_minor: { type: integer }
+        tax_minor: { type: integer }
+        total_minor: { type: integer }
+        currency: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [id, status, items, currency]
+
+    CheckoutSessionCreateRequest:
+      type: object
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [buyer, items]
+
+    CheckoutSessionUpdateRequest:
+      type: object
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CheckoutSessionCompleteRequest:
+      type: object
+      properties:
+        payment_method_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [payment_method_id]
+
+    # -------------------------------
+    # Admin / Initialization Schemas
+    # -------------------------------
+    AdminStatus:
+      type: object
+      properties:
+        ok: { type: boolean }
+        version: { type: string }
+        env: { type: string }
+      additionalProperties: true
+
+    AdminConfigRequest:
+      type: object
+      properties:
+        shopify_domain: { type: string }
+        shopify_access_token: { type: string }
+        shopify_api_version: { type: string }
+        stripe_secret_key: { type: string }
+      required: [shopify_domain, shopify_access_token, shopify_api_version, stripe_secret_key]
+
+    AdminStats:
+      type: object
+      properties:
+        products: { type: integer }
+        sessions: { type: integer }
+        completed: { type: integer }
+      additionalProperties: true
+
+    AdminSessions:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+
+    AdminAck:
+      type: object
+      properties:
+        status: { type: string }
+        message: { type: string }
+      additionalProperties: true
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+
+  /feed.json:
+    get:
+      operationId: getProductFeed
+      summary: Fetch product feed
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductFeed'
+
+  /checkout_sessions:
+    post:
+      operationId: createCheckoutSession
+      summary: Create checkout session
+      security: [ { api_key: [] } ]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+        - name: Request-Id
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionCreateRequest'
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
+  /checkout_sessions/{session_id}:
+    get:
+      operationId: getCheckoutSession
+      summary: Get checkout session
+      security: [ { api_key: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
+    post:
+      operationId: updateCheckoutSession
+      summary: Update checkout session
+      security: [ { api_key: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+        - name: Request-Id
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionUpdateRequest'
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
+  /checkout_sessions/{session_id}/complete:
+    post:
+      operationId: completeCheckoutSession
+      summary: Complete checkout session
+      security: [ { api_key: [] } ]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+        - name: Request-Id
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionCompleteRequest'
+      responses:
+        "200":
+          description: Checkout completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
+  # ------------------------------------------------
+  # Admin / Initialization (from the Postman collection)
+  # ------------------------------------------------
+  /admin/status:
+    get:
+      operationId: adminGetStatus
+      summary: Admin - Get Status
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatus'
+
+  /admin/sync:
+    post:
+      operationId: adminSyncProducts
+      summary: Admin - Sync Products
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Sync started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAck'
+
+  /admin/config:
+    post:
+      operationId: adminSaveConfig
+      summary: Admin - Save Configuration
+      security: [ { api_key: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminConfigRequest'
+      responses:
+        "200":
+          description: Configuration saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAck'
+
+  /admin/sessions:
+    get:
+      operationId: adminGetSessions
+      summary: Admin - Get Sessions
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Sessions list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSessions'
+
+  /admin/stats:
+    get:
+      operationId: adminGetStats
+      summary: Admin - Get Statistics
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+
+  /admin/test/run:
+    post:
+      operationId: adminRunFullTest
+      summary: Admin - Run Full Test
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Test executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAck'
+
+  /admin/test/sandbox:
+    post:
+      operationId: adminRunSandboxTest
+      summary: Admin - Run Sandbox Test
+      security: [ { api_key: [] } ]
+      responses:
+        "200":
+          description: Sandbox test executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAck'
