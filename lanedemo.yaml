@@ -1,35 +1,189 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Lane Universal ACP Adapter (Demo)
-  version: "1.0"
+  version: "1.0.0"
+  description: >
+    Minimal public spec for Lane's demo flow:
+    1) GET /feed.json → list products
+    2) POST /checkout_sessions → create session
+    3) GET/POST /checkout_sessions/{session_id} → read/update session
+    4) POST /checkout_sessions/{session_id}/complete → complete checkout
+
 servers:
   - url: https://acp-adapter-backend.onrender.com
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: API Key
+
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
       required: false
-      schema: { type: string }
-      description: Required for POSTs; provide a unique value per request.
+      description: Required for POSTs; unique per logical create/update attempt.
+      schema:
+        type: string
     RequestId:
       name: Request-Id
       in: header
       required: false
-      schema: { type: string }
       description: Optional client request id for tracing.
+      schema:
+        type: string
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      description: Checkout session identifier.
+      schema:
+        type: string
+
+  schemas:
+    Product:
+      type: object
+      additionalProperties: false
+      properties:
+        product_id: { type: string }
+        title: { type: string }
+        price_minor: { type: integer, description: Price in minor units (e.g., cents) }
+        currency: { type: string, default: USD }
+        enable_checkout: { type: boolean }
+        image_url: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+      required: [product_id, title, price_minor, currency, enable_checkout]
+
+    ProductFeed:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+      required: [items]
+      example:
+        items:
+          - product_id: "reaper-6oz"
+            title: "Carolina Reaper Hot Sauce (6oz)"
+            price_minor: 1299
+            currency: USD
+            enable_checkout: true
+
+    Address:
+      type: object
+      additionalProperties: true
+      properties:
+        name: { type: string }
+        line1: { type: string }
+        line2: { type: string, nullable: true }
+        city: { type: string }
+        state: { type: string }
+        postal_code: { type: string }
+        country: { type: string, default: US }
+      required: [name, line1, city, state, postal_code, country]
+
+    Buyer:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+      required: [email]
+
+    LineItem:
+      type: object
+      additionalProperties: false
+      properties:
+        product_id: { type: string }
+        quantity: { type: integer, minimum: 1, default: 1 }
+      required: [product_id, quantity]
+
+    CheckoutSession:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [draft, pending, completed, failed] }
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        subtotal_minor: { type: integer }
+        shipping_minor: { type: integer }
+        tax_minor: { type: integer }
+        total_minor: { type: integer }
+        currency: { type: string, default: USD }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [id, status, items, currency]
+
+    CheckoutSessionCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+          minItems: 1
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [buyer, items]
+      example:
+        buyer: { name: "Jack Clark", email: "jack@clark.com" }
+        items: [ { product_id: "reaper-6oz", quantity: 2 } ]
+        fulfillment_address:
+          name: "Jack Clark"
+          line1: "3616 Broderick St"
+          city: "San Francisco"
+          state: "CA"
+          postal_code: "94123"
+          country: "US"
+
+    CheckoutSessionUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+      example:
+        items: [ { product_id: "reaper-6oz", quantity: 3 } ]
+
+    CheckoutSessionCompleteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        payment_method_id:
+          type: string
+          description: Demo/test identifier; use a safe test token on sandbox.
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [payment_method_id]
+      example:
+        payment_method_id: "pm_demo_4242"
+
 paths:
   /health:
     get:
       operationId: healthCheck
       summary: Health check
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+
   /feed.json:
     get:
       operationId: getProductFeed
@@ -40,7 +194,9 @@ paths:
           description: OK
           content:
             application/json:
-              schema: { type: object }
+              schema:
+                $ref: '#/components/schemas/ProductFeed'
+
   /checkout_sessions:
     post:
       operationId: createCheckoutSession
@@ -54,77 +210,71 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                buyer:
-                  type: object
-                  properties:
-                    email: { type: string }
-                    name: { type: string }
-                items:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      product_id: { type: string }
-                      quantity: { type: integer }
-                fulfillment_address:
-                  type: object
-              required: [buyer, items]
+              $ref: '#/components/schemas/CheckoutSessionCreateRequest'
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id: { type: string }
-                  status: { type: string }
+                $ref: '#/components/schemas/CheckoutSession'
+
   /checkout_sessions/{session_id}:
     get:
       operationId: getCheckoutSession
       summary: Get checkout session
       security: [ { bearerAuth: [] } ]
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/SessionId'
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
     post:
       operationId: updateCheckoutSession
       summary: Update checkout session
       security: [ { bearerAuth: [] } ]
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/SessionId'
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/RequestId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionUpdateRequest'
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+
   /checkout_sessions/{session_id}/complete:
     post:
       operationId: completeCheckoutSession
       summary: Complete checkout session
       security: [ { bearerAuth: [] } ]
       parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              $ref: '#/components/schemas/CheckoutSessionCompleteRequest'
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
