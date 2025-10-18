@@ -3,11 +3,7 @@ info:
   title: Lane Universal ACP Adapter (Demo)
   version: "1.0.0"
   description: >
-    Minimal public spec for Lane's demo commerce flow:
-    1) GET /feed.json → list products
-    2) POST /checkout_sessions → create session
-    3) GET/POST /checkout_sessions/{session_id} → read/update session
-    4) POST /checkout_sessions/{session_id}/complete → complete checkout
+    Product feed and checkout session API for Lane's demo.
 
 servers:
   - url: https://acp-adapter-backend.onrender.com
@@ -39,7 +35,109 @@ components:
       schema:
         type: string
 
-# ✂️ (unchanged schemas here — same as your current file)
+  schemas:
+    Product:
+      type: object
+      properties:
+        product_id: { type: string }
+        title: { type: string }
+        price_minor: { type: integer, description: Price in minor units (e.g., cents) }
+        currency: { type: string, default: USD }
+        enable_checkout: { type: boolean }
+        image_url: { type: string, format: uri, nullable: true }
+        description: { type: string, nullable: true }
+      required: [product_id, title, price_minor, currency, enable_checkout]
+
+    ProductFeed:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+      required: [items]
+
+    Address:
+      type: object
+      properties:
+        name: { type: string }
+        line1: { type: string }
+        line2: { type: string, nullable: true }
+        city: { type: string }
+        state: { type: string }
+        postal_code: { type: string }
+        country: { type: string, default: US }
+      required: [name, line1, city, state, postal_code, country]
+
+    Buyer:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+      required: [email]
+
+    LineItem:
+      type: object
+      properties:
+        product_id: { type: string }
+        quantity: { type: integer, minimum: 1, default: 1 }
+      required: [product_id, quantity]
+
+    CheckoutSession:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [draft, pending, completed, failed] }
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        subtotal_minor: { type: integer }
+        shipping_minor: { type: integer }
+        tax_minor: { type: integer }
+        total_minor: { type: integer }
+        currency: { type: string, default: USD }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      required: [id, status, items, currency]
+
+    CheckoutSessionCreateRequest:
+      type: object
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+          minItems: 1
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [buyer, items]
+
+    CheckoutSessionUpdateRequest:
+      type: object
+      properties:
+        buyer: { $ref: '#/components/schemas/Buyer' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LineItem' }
+        fulfillment_address: { $ref: '#/components/schemas/Address' }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CheckoutSessionCompleteRequest:
+      type: object
+      properties:
+        payment_method_id:
+          type: string
+          description: Demo/test identifier
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [payment_method_id]
 
 paths:
   /health:
@@ -57,7 +155,7 @@ paths:
       security: [ { api_key: [] } ]
       responses:
         "200":
-          description: OK
+          description: Successful response with product feed
           content:
             application/json:
               schema:
@@ -66,7 +164,7 @@ paths:
   /checkout_sessions:
     post:
       operationId: createCheckoutSession
-      summary: Create checkout session
+      summary: Create a new checkout session
       security: [ { api_key: [] } ]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -79,7 +177,7 @@ paths:
               $ref: '#/components/schemas/CheckoutSessionCreateRequest'
       responses:
         "201":
-          description: Created
+          description: Checkout session created
           content:
             application/json:
               schema:
@@ -88,13 +186,13 @@ paths:
   /checkout_sessions/{session_id}:
     get:
       operationId: getCheckoutSession
-      summary: Get checkout session
+      summary: Retrieve checkout session by ID
       security: [ { api_key: [] } ]
       parameters:
         - $ref: '#/components/parameters/SessionId'
       responses:
         "200":
-          description: OK
+          description: Checkout session data
           content:
             application/json:
               schema:
@@ -102,7 +200,7 @@ paths:
 
     post:
       operationId: updateCheckoutSession
-      summary: Update checkout session
+      summary: Update a checkout session
       security: [ { api_key: [] } ]
       parameters:
         - $ref: '#/components/parameters/SessionId'
@@ -116,7 +214,7 @@ paths:
               $ref: '#/components/schemas/CheckoutSessionUpdateRequest'
       responses:
         "200":
-          description: OK
+          description: Updated checkout session
           content:
             application/json:
               schema:
@@ -139,7 +237,7 @@ paths:
               $ref: '#/components/schemas/CheckoutSessionCompleteRequest'
       responses:
         "200":
-          description: OK
+          description: Checkout completed
           content:
             application/json:
               schema:
