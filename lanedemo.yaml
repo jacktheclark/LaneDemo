@@ -15,26 +15,6 @@ components:
       in: header
       name: Authorization
 
-  parameters:
-    IdempotencyKey:
-      name: Idempotency-Key
-      in: header
-      required: false
-      schema:
-        type: string
-    RequestId:
-      name: Request-Id
-      in: header
-      required: false
-      schema:
-        type: string
-    SessionId:
-      name: session_id
-      in: path
-      required: true
-      schema:
-        type: string
-
   schemas:
     Product:
       type: object
@@ -167,8 +147,16 @@ paths:
       summary: Create a new checkout session
       security: [ { api_key: [] } ]
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/RequestId'
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -189,7 +177,11 @@ paths:
       summary: Retrieve checkout session by ID
       security: [ { api_key: [] } ]
       parameters:
-        - $ref: '#/components/parameters/SessionId'
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Checkout session data
@@ -203,9 +195,21 @@ paths:
       summary: Update a checkout session
       security: [ { api_key: [] } ]
       parameters:
-        - $ref: '#/components/parameters/SessionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/RequestId'
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -226,9 +230,21 @@ paths:
       summary: Complete checkout session
       security: [ { api_key: [] } ]
       parameters:
-        - $ref: '#/components/parameters/SessionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/RequestId'
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
       requestBody:
         required: true
         content:
